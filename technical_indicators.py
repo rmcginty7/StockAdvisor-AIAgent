@@ -1,6 +1,6 @@
 from typing import Optional
 
-import talib
+import numpy as np
 import pandas as pd
 
 class TechnicalIndicators:
@@ -44,7 +44,7 @@ class TechnicalIndicators:
         if "close" not in self.data.columns:
             raise ValueError("DataFrame must contain 'close' column")
 
-        self.data[f"SMA_{period}"] = talib.SMA(self.data["close"], timeperiod=period)
+        self.data[f"SMA_{period}"] = self.data["close"].rolling(window=period, min_periods=period).mean()
         return self
 
     # Add Relative Strength Index (RSI) calculation
@@ -53,8 +53,18 @@ class TechnicalIndicators:
         # Uses only the close column 
         if "close" not in self.data.columns:
             raise ValueError("DataFrame must contain 'close' column")
-        
-        self.data[f"RSI_{period}"] = talib.RSI(self.data["close"], timeperiod=period)
+
+        delta = self.data["close"].diff()
+        gain = delta.clip(lower=0)
+        loss = -delta.clip(upper=0)
+
+        avg_gain = gain.ewm(alpha=1 / period, adjust=False).mean()
+        avg_loss = loss.ewm(alpha=1 / period, adjust=False).mean()
+
+        rs = avg_gain / avg_loss.replace({0: np.nan})
+        rsi = 100 - (100 / (1 + rs))
+
+        self.data[f"RSI_{period}"] = rsi
         return self
 
     # Add Exponential Moving Average (EMA) calculation
@@ -62,8 +72,8 @@ class TechnicalIndicators:
 
         if "close" not in self.data.columns:
             raise ValueError("DataFrame must contain 'close' column")
-        
-        self.data[f"EMA_{period}"] = talib.EMA(self.data["close"], timeperiod=period)
+
+        self.data[f"EMA_{period}"] = self.data["close"].ewm(span=period, adjust=False).mean()
         return self
     
     # Add Moving Average Convergence Divergence (MACD) calculation
@@ -71,13 +81,16 @@ class TechnicalIndicators:
         
         if "close" not in self.data.columns:
             raise ValueError("DataFrame must contain 'close' column")
-        
-        self.data["MACD"], self.data["MACD_signal"], self.data["MACD_hist"] = talib.MACD(
-            self.data["close"],
-            fastperiod=12,
-            slowperiod=26,
-            signalperiod=9
-        )
+
+        fast_ema = self.data["close"].ewm(span=12, adjust=False).mean()
+        slow_ema = self.data["close"].ewm(span=26, adjust=False).mean()
+        macd_line = fast_ema - slow_ema
+        macd_signal = macd_line.ewm(span=9, adjust=False).mean()
+        macd_hist = macd_line - macd_signal
+
+        self.data["MACD"] = macd_line
+        self.data["MACD_signal"] = macd_signal
+        self.data["MACD_hist"] = macd_hist
         return self
 
     # Add Bollinger Bands calulation
@@ -86,16 +99,12 @@ class TechnicalIndicators:
         if "close" not in self.data.columns:
             raise ValueError("DataFrame must contain 'close' column")
 
-        upper, middle, lower = talib.BBANDS(
-            self.data["close"], 
-            timeperiod=period,
-            nbdevup=2,          # Default standard deviation for upper band
-            nbdevdn=2,          # Default standard deviation for lower band
-            matype=0            # Simple Moving Average
-            )
-        self.data["BB_upper"] = upper
-        self.data["BB_middle"] = middle
-        self.data["BB_lower"] = lower 
+        rolling_mean = self.data["close"].rolling(window=period, min_periods=period).mean()
+        rolling_std = self.data["close"].rolling(window=period, min_periods=period).std()
+
+        self.data["BB_upper"] = rolling_mean + (2 * rolling_std)
+        self.data["BB_middle"] = rolling_mean
+        self.data["BB_lower"] = rolling_mean - (2 * rolling_std)
         return self
 
 if __name__ == "__main__":
