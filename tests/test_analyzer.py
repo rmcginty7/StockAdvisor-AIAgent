@@ -9,7 +9,7 @@ if str(ROOT) not in sys.path:
 import pandas as pd
 import pytest
 
-from analyzer import StockAnalyzer as Analyzer
+from stock_advisor.analyzer import StockAnalyzer as Analyzer
 
 
 @pytest.fixture

@@ -2,7 +2,7 @@
 import pandas as pd
 import pytest
 
-from data_fetcher import DataFetcher
+from stock_advisor.data_fetcher import DataFetcher
 
 
 # ---------- Unit tests for validate_symbol ----------

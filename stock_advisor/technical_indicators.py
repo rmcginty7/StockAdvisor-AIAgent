@@ -36,6 +36,10 @@ class TechnicalIndicators:
 
         # Normalize column names to lowercase strings for internal use
         self.data.columns = [str(col).strip().lower() for col in self.data.columns]
+        # Preserve common OHLCV names in title case for downstream analyzers
+        for base in ["open", "high", "low", "close", "volume"]:
+            if base in self.data.columns:
+                self.data[base.capitalize()] = self.data[base]
 
 
     # Add Simple Moving Average (SMA) calculation
@@ -65,6 +69,8 @@ class TechnicalIndicators:
         rsi = 100 - (100 / (1 + rs))
 
         self.data[f"RSI_{period}"] = rsi
+        # Analyzer expects a generic RSI column
+        self.data["RSI"] = rsi
         return self
 
     # Add Exponential Moving Average (EMA) calculation
@@ -90,6 +96,8 @@ class TechnicalIndicators:
 
         self.data["MACD"] = macd_line
         self.data["MACD_signal"] = macd_signal
+        # Analyzer expects the signal column named 'Signal'
+        self.data["Signal"] = macd_signal
         self.data["MACD_hist"] = macd_hist
         return self
 
@@ -106,7 +114,25 @@ class TechnicalIndicators:
         self.data["BB_middle"] = rolling_mean
         self.data["BB_lower"] = rolling_mean - (2 * rolling_std)
         return self
+    
+    def calculate_all_indicators(self) -> None:
+        """
+        Convenience helper to compute all the indicators needed
+        by the Analyzer / DecisionEngine.
+        """
 
+        (
+            self.calculate_rsi(14)
+            .calculate_macd()
+            .calculate_sma(20)
+            .calculate_sma(50)
+            .calculate_ema(12)
+            .calculate_ema(26)
+            .calculate_bb(20)
+        )
+
+
+# Some testing
 if __name__ == "__main__":
     import yfinance as yf
 

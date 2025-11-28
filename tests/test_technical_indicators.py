@@ -2,7 +2,7 @@ import pandas as pd
 import pytest 
 import numpy as np
 
-from technical_indicators import TechnicalIndicators
+from stock_advisor.technical_indicators import TechnicalIndicators
 
 @pytest.fixture
 def sample_data():
