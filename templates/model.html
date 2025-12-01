@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Model Summary – Stock Advisor</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  </head>
+  <body>
+    <div class="page">
+      <header class="header">
+        <div class="logo">📈 Stock Advisor</div>
+        <div class="subtitle">Model Summary & How It Works</div>
+
+        <!-- Top disclaimer -->
+        <div class="disclaimer">
+          <strong>Disclaimer:</strong>
+          This tool is for educational and research purposes only.
+          It does not constitute financial advice.
+        </div>
+
+        <div style="margin-top: 0.5rem;">
+          <a href="{{ url_for('index') }}" class="btn secondary">← Back to app</a>
+        </div>
+      </header>
+
+      <main class="main">
+        <div class="card">
+          <h2>What indicators does this tool use?</h2>
+          <ul>
+            <li><strong>RSI (Relative Strength Index)</strong> – momentum oscillator with oversold/overbought zones (e.g. 25 / 75).</li>
+            <li><strong>MACD (Moving Average Convergence Divergence)</strong> – uses MACD vs signal line crossovers for trend/momentum shifts.</li>
+            <li><strong>SMA / EMA</strong> – short vs long moving averages (e.g. SMA 20/50, EMA 12/26) to detect trend direction.</li>
+            <li><strong>Bollinger Bands</strong> – price relative to upper/lower bands to highlight extremes and potential mean reversion.</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h2>How does the decision engine work?</h2>
+          <ol>
+            <li><strong>Fetch data:</strong> Get OHLCV data for the selected ticker.</li>
+            <li><strong>Compute indicators:</strong> RSI, MACD + signal, SMA/EMA, Bollinger Bands.</li>
+            <li><strong>Convert to signals:</strong> each indicator produces a value in
+              <code>{ -1, 0, 1 }</code>:
+              <ul>
+                <li><code>1</code> = bullish bias (Buy)</li>
+                <li><code>0</code> = neutral / no strong view</li>
+                <li><code>-1</code> = bearish bias (Sell)</li>
+              </ul>
+            </li>
+            <li><strong>Combine signals:</strong>
+              <ul>
+                <li>Apply per-indicator weights (e.g. trend-heavy or momentum-heavy profiles).</li>
+                <li>Sum the weighted signals into a <code>signal_sum</code>.</li>
+                <li>Require a minimum level of agreement before acting (consensus rule).</li>
+                <li>Map the final result to <strong>BUY / HOLD / SELL</strong>.</li>
+              </ul>
+            </li>
+          </ol>
+        </div>
+
+        <div class="card">
+          <h2>How is confidence calculated?</h2>
+          <p>
+            Confidence measures how strongly the indicators line up in one direction.
+          </p>
+          <ul>
+            <li>The engine computes a <code>signal_sum</code> from the indicator signals.</li>
+            <li>It normalizes that by the number of indicators to produce a 0–1 score.</li>
+            <li>If all indicators agree, confidence moves closer to 1.0.</li>
+            <li>If indicators are mixed, confidence stays closer to 0.0–0.5.</li>
+            <li>Optionally, sentiment (if provided) can nudge confidence up or down when it agrees or disagrees with the signal direction.</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h2>How does volatility affect position sizing?</h2>
+          <ul>
+            <li>The engine estimates volatility using a rolling standard deviation of returns (e.g. 20-day window).</li>
+            <li>You set a maximum risk per trade (e.g. 1% of account equity).</li>
+            <li>Higher volatility → smaller effective position size; lower volatility → larger allowed size.</li>
+            <li>The final position size in dollars is based on:
+              <ul>
+                <li>Account equity</li>
+                <li>Max risk per trade</li>
+                <li>Confidence score</li>
+                <li>Volatility adjustment</li>
+              </ul>
+            </li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h2>How does backtesting work?</h2>
+          <ul>
+            <li>For each historical bar, the engine:
+              <ul>
+                <li>Runs the full decision pipeline (indicators → signals → action).</li>
+                <li>Simulates entry/exit trades based on BUY/SELL actions.</li>
+                <li>Applies trading costs, stop-loss, and take-profit rules.</li>
+              </ul>
+            </li>
+            <li>The backtester tracks:
+              <ul>
+                <li>Portfolio equity over time (equity curve).</li>
+                <li>Per-trade P&amp;L.</li>
+                <li>Summary statistics: total return, max drawdown, win rate, number of trades.</li>
+              </ul>
+            </li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h2>Important disclaimer</h2>
+          <p>
+            This project is designed for <strong>educational and research purposes only</strong>.
+            It is not a recommendation system and does not constitute financial advice.
+            Markets involve risk, and past performance shown in backtests does not guarantee future results.
+          </p>
+        </div>
+      </main>
+    </div>
+  </body>
+</html>

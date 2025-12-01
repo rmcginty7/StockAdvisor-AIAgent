@@ -10,6 +10,12 @@ def index():
     """
     return render_template("index.html")
 
+@app.route("/model")
+def model_summary():
+    """
+    Render a page that summarizes the AI trading model."""
+    return render_template("model.html")
+
 @app.route("/api/decision", methods=["GET"])
 def api_decision():
     """
@@ -50,6 +56,8 @@ def api_backtest():
         return jsonify({"ok": True, "symbol": symbol, **bt_results})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e), "symbol": symbol}), 400
+    
+
 
 if __name__ == "__main__":
     app.run(debug=True)
