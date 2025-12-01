@@ -201,6 +201,7 @@ StockAdvisor-AIAgent/
 
   README.md
   requirements.txt
+```
 
 ---
 
@@ -220,5 +221,5 @@ StockAdvisor-AIAgent/
 4. Run the app
 - python app.py
 
-
+---
 
