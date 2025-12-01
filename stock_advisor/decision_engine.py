@@ -1,6 +1,7 @@
 from typing import Optional, Dict, Any
 import pandas as pd
 
+from stock_advisor import analyzer
 from stock_advisor.analyzer import StockAnalyzer
 
 DEFAULT_WEIGHTS_MOMENTUM_HEAVY: Dict[str, float] = {
@@ -190,13 +191,20 @@ class DecisionEngine:
         bearish = []
 
         for col in analyzer.data.columns:
-            if col.endswith("_signal"):
-                name = col.replace("_signal", "").upper()
-                val = latest_row[col]
-                if val > 0:
-                    bullish.append(name)
-                elif val < 0:
-                    bearish.append(name)
+            if not col.endswith("_signal"):
+                continue
+
+    # Skip the unified final signal – we only want raw indicators
+            if col == "final_signal":
+                continue
+
+            name = col.replace("_signal", "").upper()
+            val = latest_row[col]
+
+            if val > 0:
+                bullish.append(name)
+            elif val < 0:
+                bearish.append(name)
 
         action_map = {1: "BUY", 0: "HOLD", -1: "SELL"}
         action = action_map.get(signal, "HOLD")

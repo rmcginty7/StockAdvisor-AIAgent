@@ -1,0 +1,497 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Stock Advisor – AI Decision Engine</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script> 
+  </head>
+  <body>
+    <div class="page">
+      <header class="header">
+        <div class="logo">📈 Stock Advisor</div>
+        <div class="subtitle">AI-powered technical analysis & backtesting</div>
+      </header>
+
+      <main class="main">
+        <div class="disclaimer">
+          <strong>Disclaimer:</strong> This tool is for educational and research purposes only.
+          It does not constitute financial advice.
+        </div>
+        <section class="grid">
+          <!-- LEFT COLUMN: Decision + Indicators -->
+          <div class="column">
+            <div class="card">
+              <h2>Analyze a Symbol</h2>
+              <form id="decision-form" class="form">
+                <div class="field">
+                  <label for="symbol-input">Ticker symbol</label>
+                  <input
+                    id="symbol-input"
+                    name="symbol"
+                    type="text"
+                    value="AAPL"
+                    maxlength="10"
+                    required
+                  />
+                </div>
+
+                <div class="field">
+                  <label for="lookback-input">Lookback days (history window)</label>
+                  <input
+                    id="lookback-input"
+                    name="lookback_days"
+                    type="number"
+                    value="252"
+                    min="30"
+                    step="1"
+                  />
+                </div>
+
+                <button type="submit" class="btn primary">Get Decision</button>
+              </form>
+
+              <div id="decision-result" class="result">
+                <p class="placeholder">Submit a symbol to see the AI's decision.</p>
+              </div>
+            </div>
+
+            <div id="decision-chart-wrapper" class="chart-wrapper">
+              <h4>Price & Signals (recent)</h4>
+              <canvas id="decision-chart"></canvas>
+            </div>
+
+            <div id="indicator-card" class="card indicator-card hidden">
+              <h2>Indicator Snapshot</h2>
+              <div id="indicator-content" class="indicator-content">
+                <p class="placeholder">Run an analysis to see indicators.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- RIGHT COLUMN: Backtest -->
+          <div class="column">
+            <div class="card">
+              <h2>Quick Backtest</h2>
+              <form id="backtest-form" class="form">
+                <div class="field">
+                  <label for="bt-symbol-input">Ticker symbol</label>
+                  <input
+                    id="bt-symbol-input"
+                    name="symbol"
+                    type="text"
+                    value="AAPL"
+                    maxlength="10"
+                    required
+                  />
+                </div>
+
+                <div class="field">
+                  <label for="bt-start-date-input">Start date (YYYY-MM-DD)</label>
+                  <input
+                    id="bt-start-date-input"
+                    name="start_date"
+                    type="text"
+                    value="2020-01-01"
+                  />
+                </div>
+
+                <button type="submit" class="btn secondary">Run Backtest</button>
+              </form>
+
+              <div id="backtest-result" class="result">
+                <p class="placeholder">Run a backtest to see stats & sample trades.</p>
+              </div>
+              <div id="backtest-chart-wrapper" class="chart-wrapper">
+                <h4>Equity Curve</h4>
+                <canvas id="backtest-chart"></canvas>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <span>Built with Python, TA-Lib, and Flask.</span>
+      </footer>
+    </div>
+
+    <script>
+      let decisionChart = null;
+      let backtestChart = null;
+
+      // --- Helper: map action to a color/status pill ---
+      function actionPill(action) {
+        const a = (action || "").toUpperCase();
+        let cls = "pill neutral";
+        if (a === "BUY") cls = "pill buy";
+        else if (a === "SELL") cls = "pill sell";
+        return `<span class="${cls}">${a || "HOLD"}</span>`;
+      }
+
+      function updateDecisionChart(history) {
+        const canvas = document.getElementById("decision-chart");
+        if (!canvas || !history || history.length === 0) return;
+
+        const labels = history.map((p) => p.time);
+        const prices = history.map((p) => p.Close);
+
+        // Mark only transitions into BUY or SELL
+        const buyPoints = new Array(history.length).fill(null);
+        const sellPoints = new Array(history.length).fill(null);
+
+        for (let i = 0; i < history.length; i++) {
+          const sig = history[i].final_signal || 0;
+          const prevSig = i > 0 ? history[i - 1].final_signal || 0 : 0;
+
+          if (sig === 1 && prevSig !== 1) {
+            buyPoints[i] = prices[i];
+          } else if (sig === -1 && prevSig !== -1) {
+            sellPoints[i] = prices[i];
+          }
+        }
+
+        if (decisionChart) {
+          decisionChart.destroy();
+        }
+
+        const ctx = canvas.getContext("2d");
+        decisionChart = new Chart(ctx, {
+          type: "line",
+          data: {
+            labels,
+            datasets: [
+              {
+                label: "Close",
+                data: prices,
+                borderWidth: 1.5,
+                pointRadius: 0,
+                tension: 0.15,
+              },
+              {
+                label: "Buy",
+                data: buyPoints,
+                borderWidth: 0,
+                pointRadius: 4,
+                pointStyle: "circle",
+              },
+              {
+                label: "Sell",
+                data: sellPoints,
+                borderWidth: 0,
+                pointRadius: 4,
+                pointStyle: "triangle",
+              },
+            ],
+          },
+          options: {
+            scales: {
+              x: {
+                ticks: { maxTicksLimit: 6 },
+              },
+              y: {
+                beginAtZero: false,
+              },
+            },
+            plugins: {
+              legend: { display: true },
+            },
+          },
+        });
+      }
+
+      // --- Render Decision + Reasoning ---
+      function renderDecision(decisionData) {
+        const container = document.getElementById("decision-result");
+        const indicatorCard = document.getElementById("indicator-card");
+        const indicatorContent = document.getElementById("indicator-content");
+
+        if (!decisionData.ok) {
+          container.innerHTML = `<p class="error">Error: ${decisionData.error || "Unknown error"}</p>`;
+          indicatorCard.classList.add("hidden");
+          return;
+        }
+
+        const d = decisionData.decision;
+        updateDecisionChart(d.history || []);
+        const reasoning = d.reasoning || "";
+        const lastClose = d.last_close;
+        const confPct = (d.confidence * 100).toFixed(1);
+        const posSize = d.position_size_value.toFixed(2);
+        const vol = d.volatility.toFixed(4);
+
+        container.innerHTML = `
+          <div class="decision-header">
+            <div>
+              <h3>${d.symbol} – as of ${d.as_of}</h3>
+              <div class="decision-meta">
+                <span>Last close: <strong>${lastClose?.toFixed ? lastClose.toFixed(2) : lastClose}</strong></span>
+                <span>Volatility (20d): <strong>${vol}</strong></span>
+              </div>
+            </div>
+            <div class="decision-action">
+              ${actionPill(d.action)}
+              <div class="confidence">${confPct}% confidence</div>
+            </div>
+          </div>
+
+          <div class="decision-body">
+            <ul>
+              <li><strong>Suggested position size:</strong> $${posSize}</li>
+            </ul>
+            <h4>Reasoning</h4>
+            <p class="reasoning">${reasoning}</p>
+          </div>
+        `;
+
+        // --- Indicator Snapshot ---
+        const ind = d.indicator_snapshot || {};
+        const sig = d.signal_snapshot || {};
+
+        const indicatorRows = [];
+        const ordered = [
+          "RSI",
+          "MACD",
+          "Signal",
+          "SMA_20",
+          "SMA_50",
+          "EMA_12",
+          "EMA_26",
+          "BB_upper",
+          "BB_lower",
+        ];
+
+        ordered.forEach((key) => {
+          if (key in ind) {
+            const label = key
+              .replace("_", " ")
+              .replace("BB", "Bollinger Band")
+              .replace("SMA", "SMA")
+              .replace("EMA", "EMA");
+            indicatorRows.push(`
+              <tr>
+                <td>${label}</td>
+                <td>${ind[key].toFixed(2)}</td>
+              </tr>
+            `);
+          }
+        });
+
+        const signalRows = Object.entries(sig)
+          .filter(([name]) => name !== "final_signal")
+          .map(([name, value]) => {
+            const pretty = name.replace("_signal", "").toUpperCase();
+            let cls = "signal-neutral";
+            if (value > 0) cls = "signal-bull";
+            else if (value < 0) cls = "signal-bear";
+            const text =
+              value > 0 ? "Bullish" : value < 0 ? "Bearish" : "Neutral";
+            return `
+              <tr>
+                <td>${pretty}</td>
+                <td><span class="${cls}">${text}</span></td>
+              </tr>
+            `;
+          });
+
+        indicatorCard.classList.remove("hidden");
+        indicatorContent.innerHTML = `
+          <div class="indicator-grid">
+            <div>
+              <h4>Core Indicators</h4>
+              ${
+                indicatorRows.length === 0
+                  ? "<p class='placeholder'>No indicator data available.</p>"
+                  : `
+                    <table class="mini-table">
+                      <tbody>
+                        ${indicatorRows.join("")}
+                      </tbody>
+                    </table>
+                  `
+              }
+            </div>
+            <div>
+              <h4>Indicator Signals</h4>
+              ${
+                signalRows.length === 0
+                  ? "<p class='placeholder'>No signals generated.</p>"
+                  : `
+                    <table class="mini-table">
+                      <tbody>
+                        ${signalRows.join("")}
+                      </tbody>
+                    </table>
+                  `
+              }
+            </div>
+          </div>
+        `;
+      }
+
+      function updateBacktestChart(equitySeries) {
+        const canvas = document.getElementById("backtest-chart");
+        if (!canvas || !equitySeries || equitySeries.length === 0) return;
+
+        const labels = equitySeries.map((p) => p.time);
+        const equity = equitySeries.map((p) => p.equity);
+
+        if (backtestChart) {
+          backtestChart.destroy();
+        }
+
+        const ctx = canvas.getContext("2d");
+        backtestChart = new Chart(ctx, {
+          type: "line",
+          data: {
+            labels,
+            datasets: [
+              {
+                label: "Equity",
+                data: equity,
+                borderWidth: 1.5,
+                pointRadius: 0,
+                tension: 0.15,
+              },
+            ],
+          },
+          options: {
+            scales: {
+              x: {
+                ticks: { maxTicksLimit: 6 },
+              },
+              y: {
+                beginAtZero: false,
+              },
+            },
+            plugins: {
+              legend: { display: true },
+            },
+          },
+        });
+      }
+
+      // --- Render Backtest ---
+      function renderBacktest(btData) {
+        const container = document.getElementById("backtest-result");
+        if (!btData.ok) {
+          container.innerHTML = `<p class="error">Error: ${btData.error || "Unknown error"}</p>`;
+          return;
+        }
+
+        const s = btData.stats;
+        const trades = btData.trades_sample || [];
+
+        const totalReturn = s.total_return_pct?.toFixed
+          ? s.total_return_pct.toFixed(3)
+          : s.total_return_pct;
+        const maxDD = s.max_drawdown_pct?.toFixed
+          ? s.max_drawdown_pct.toFixed(3)
+          : s.max_drawdown_pct;
+        const winRate = s.win_rate_pct?.toFixed
+          ? s.win_rate_pct.toFixed(1)
+          : s.win_rate_pct;
+
+        container.innerHTML = `
+          <h3>Backtest for ${btData.symbol}</h3>
+          <ul class="stats-list">
+            <li><strong>Total return:</strong> ${totalReturn}%</li>
+            <li><strong>Max drawdown:</strong> ${maxDD}%</li>
+            <li><strong>Number of trades:</strong> ${s.num_trades}</li>
+            <li><strong>Win rate:</strong> ${winRate}%</li>
+            <li><strong>Data points:</strong> ${btData.num_data_points}</li>
+          </ul>
+
+          <h4>Sample trades (up to 10)</h4>
+          ${
+            trades.length === 0
+              ? "<p class='placeholder'>No trades executed.</p>"
+              : `
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>Time</th>
+                      <th>Action</th>
+                      <th>Price</th>
+                      <th>Shares</th>
+                      <th>Cash After</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${trades
+                      .map(
+                        (t) => `
+                      <tr>
+                        <td>${t.time}</td>
+                        <td>${t.action}</td>
+                        <td>${Number(t.price).toFixed(2)}</td>
+                        <td>${Number(t.shares).toFixed(4)}</td>
+                        <td>${Number(t.cash_after || 0).toFixed(2)}</td>
+                      </tr>
+                    `
+                      )
+                      .join("")}
+                  </tbody>
+                </table>
+              `
+          }
+        `;
+        updateBacktestChart(btData.equity_series || []);
+      }
+
+      // --- Wire up decision form ---
+      document.getElementById("decision-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const symbol = document
+          .getElementById("symbol-input")
+          .value.trim()
+          .toUpperCase();
+        const lookback =
+          document.getElementById("lookback-input").value.trim() || "252";
+
+        const container = document.getElementById("decision-result");
+        container.innerHTML = "<p>Loading decision...</p>";
+
+        try {
+          const res = await fetch(
+            `/api/decision?symbol=${encodeURIComponent(
+              symbol
+            )}&lookback_days=${encodeURIComponent(lookback)}`
+          );
+          const data = await res.json();
+          renderDecision(data);
+        } catch (err) {
+          container.innerHTML = `<p class="error">Request failed: ${err}</p>`;
+        }
+      });
+
+      // --- Wire up backtest form ---
+      document.getElementById("backtest-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const symbol = document
+          .getElementById("bt-symbol-input")
+          .value.trim()
+          .toUpperCase();
+        const startDate =
+          document
+            .getElementById("bt-start-date-input")
+            .value.trim() || "2020-01-01";
+
+        const container = document.getElementById("backtest-result");
+        container.innerHTML = "<p>Running backtest...</p>";
+
+        try {
+          const res = await fetch(
+            `/api/backtest?symbol=${encodeURIComponent(
+              symbol
+            )}&start_date=${encodeURIComponent(startDate)}`
+          );
+          const data = await res.json();
+          renderBacktest(data);
+        } catch (err) {
+          container.innerHTML = `<p class="error">Request failed: ${err}</p>`;
+        }
+      });
+    </script>
+  </body>
+</html>

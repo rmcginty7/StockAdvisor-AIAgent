@@ -10,8 +10,9 @@ import yfinance as yf
 class DataFetcher:
     """Fetch and normalize market data via yfinance."""
 
-    def __init__(self):
-        pass
+    def __init__(self, period: str = "5y", interval: str = "1d") -> None:
+        self.period = period
+        self.interval = interval
 
     def validate_symbol(self, symbol: str) -> str:
         """Return an uppercase ticker symbol after basic validation."""
